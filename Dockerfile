@@ -27,6 +27,6 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Copy custom Nginx configuration with COOP/COEP WASM headers
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 8998
+EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
