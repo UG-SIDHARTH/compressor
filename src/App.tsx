@@ -114,9 +114,6 @@ export function App() {
         hasTransparency = await checkImageTransparency(file);
       }
 
-      // Default format selection:
-      // If transparent image -> PNG or WebP
-      // Otherwise -> WebP (Default best compression + quality)
       const defaultImgFormat: ImageFormat = hasTransparency ? 'png' : 'webp';
 
       const defaultImageSettings: ImageSettings = {
@@ -132,7 +129,7 @@ export function App() {
 
       const defaultVideoSettings: VideoSettings = {
         format: (['webm', 'mov', 'avi', 'mkv'].includes(ext) ? ext : 'mp4') as VideoFormat,
-        preset: 'compatible', // Default: Compatible (H.264, CRF 20)
+        preset: 'compatible',
         resolution: 'original',
       };
 
@@ -568,7 +565,7 @@ export function App() {
       </main>
 
       <footer className="py-6 px-8 border-t border-slate-200 dark:border-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors duration-300">
-        <p>Compressify Studio PRO • 100% Client-Side Private Media Compressor & Converter (Videos up to 1.5 GB)</p>
+        <p>CrispCompress PRO • 100% Client-Side Private Media Compressor & Converter (Videos up to 1.5 GB)</p>
       </footer>
 
       <ComparisonModal
