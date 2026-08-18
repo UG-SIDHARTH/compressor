@@ -1,12 +1,12 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, Film, Image as ImageIcon, PlusCircle } from 'lucide-react';
+import { Upload, Film, ImageIcon, ShieldCheck, Sparkles } from 'lucide-react';
 
 interface UploadZoneProps {
   onFilesSelected: (files: File[]) => void;
 }
 
 export const UploadZone: React.FC<UploadZoneProps> = ({ onFilesSelected }) => {
-  const [isDragOver, setIsDragOver] = useState(false);
+  const [isDragOver, setIsDragOver] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -27,16 +27,16 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFilesSelected }) => {
     setIsDragOver(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const filesArray = Array.from(e.dataTransfer.files);
-      onFilesSelected(filesArray);
+      onFilesSelected(Array.from(e.dataTransfer.files));
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const filesArray = Array.from(e.target.files);
-      onFilesSelected(filesArray);
-      e.target.value = '';
+      onFilesSelected(Array.from(e.target.files));
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -46,56 +46,61 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onFilesSelected }) => {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       onClick={() => fileInputRef.current?.click()}
-      className={`relative group cursor-pointer border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center transition-all duration-300 ${
+      className={`relative group cursor-pointer rounded-3xl p-8 sm:p-12 text-center transition-all duration-300 border-2 border-dashed ${
         isDragOver
-          ? 'border-brand-500 bg-brand-50/50 dark:bg-brand-950/30 scale-[1.01] shadow-2xl shadow-brand-500/10'
-          : 'border-slate-300 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 hover:border-brand-400 dark:hover:border-brand-500 hover:bg-slate-50/80 dark:hover:bg-slate-900/80 shadow-md'
+          ? 'border-brand-500 bg-brand-500/10 dark:bg-brand-500/10 scale-[1.01] shadow-2xl'
+          : 'border-slate-300 dark:border-slate-800 bg-white dark:bg-[#0E1322] hover:border-brand-500/50 hover:bg-slate-50 dark:hover:bg-[#12182B] shadow-xl'
       }`}
     >
       <input
         ref={fileInputRef}
         type="file"
         multiple
-        accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm,.jpg,.jpeg,.png,.webp,.gif"
-        onChange={handleFileChange}
+        accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,image/jpeg,image/png,image/webp,image/gif"
+        onChange={handleFileInputChange}
         className="hidden"
       />
 
       <div className="flex flex-col items-center justify-center space-y-4">
-        <div
-          className={`w-20 h-20 rounded-2xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 ${
-            isDragOver
-              ? 'bg-brand-500 text-white shadow-xl shadow-brand-500/30'
-              : 'bg-brand-50 dark:bg-slate-800 text-brand-600 dark:text-brand-400'
-          }`}
-        >
-          <UploadCloud className="w-10 h-10 animate-bounce" />
+        
+        {/* Upload Icon Badge */}
+        <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 shadow-lg ${
+          isDragOver
+            ? 'bg-brand-500 text-white shadow-brand-500/30'
+            : 'bg-gradient-to-tr from-brand-500 to-rose-500 text-white shadow-rose-500/20'
+        }`}>
+          <Upload className="w-8 h-8" />
         </div>
 
-        <div className="space-y-1">
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-            {isDragOver ? 'Drop your files here!' : 'Drag & drop media files here'}
+        {/* Action Callout */}
+        <div className="space-y-1 max-w-lg">
+          <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">
+            Drag & drop media files here, or <span className="text-brand-500 underline underline-offset-4">browse</span>
           </h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            or <span className="text-brand-600 dark:text-brand-400 font-semibold underline underline-offset-2">click to browse</span> from your device
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Upload single or multiple video & image files at once (Videos up to 1.5 GB)
           </p>
         </div>
 
-        <div className="flex flex-wrap justify-center gap-2 pt-2 max-w-xl mx-auto">
-          <div className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-            <Film className="w-3.5 h-3.5" />
-            <span>Video: MP4, MOV, AVI, MKV, WEBM</span>
-          </div>
-          <div className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
-            <ImageIcon className="w-3.5 h-3.5" />
-            <span>Photo: JPG, PNG, WEBP, GIF</span>
-          </div>
+        {/* Format Badges & Privacy Guarantee */}
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1.5">
+            <Film className="w-3.5 h-3.5" /> Videos (MP4, MOV, AVI, MKV, WebM)
+          </span>
+
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1.5">
+            <ImageIcon className="w-3.5 h-3.5" /> Photos (JPG, PNG, WebP, GIF)
+          </span>
+
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5" /> Max Video Size: 1.5 GB
+          </span>
+
+          <span className="px-3 py-1 rounded-full text-[11px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5" /> 100% In-Browser Private
+          </span>
         </div>
 
-        <div className="flex items-center gap-1 text-xs text-slate-400 dark:text-slate-500 font-medium">
-          <PlusCircle className="w-3.5 h-3.5 text-slate-400" />
-          <span>Batch support: Select multiple files at once</span>
-        </div>
       </div>
     </div>
   );

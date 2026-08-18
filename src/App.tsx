@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 import type { 
   MediaItem, MediaSettings, ImageFormat, VideoFormat, ImageSettings, VideoSettings 
 } from './types/media';
-import { getMediaTypeFromExtension, getFileExtension } from './utils/formatHelpers';
+import { getMediaTypeFromExtension, getFileExtension, formatFileSize } from './utils/formatHelpers';
 import { getImageDimensions, processImage, estimateImageSize } from './utils/imageProcessor';
 import { getVideoMetadata, processVideo, estimateVideoSize, getFFmpeg } from './utils/videoProcessor';
 import { downloadAllAsZip, downloadSingleFile } from './utils/zipPackager';
@@ -18,6 +18,8 @@ import { MediaCard } from './components/MediaCard';
 import { ComparisonModal } from './components/ComparisonModal';
 import { ToastNotification } from './components/ToastNotification';
 import type { ToastMessage } from './components/ToastNotification';
+
+const MAX_VIDEO_SIZE_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB limit specifically for videos
 
 export function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -83,14 +85,25 @@ export function App() {
         continue;
       }
 
-      if (file.size > 300 * 1024 * 1024) {
-        addToast('info', 'Large File Warning', `${file.name} is >300MB. Processing in browser WASM may take longer.`);
-      }
-
       const type = getMediaTypeFromExtension(file.name);
       if (type === 'unsupported') {
         addToast('error', 'Unsupported Format', `${file.name} is not a supported video or photo format.`);
         continue;
+      }
+
+      // 1. Strict 1.5 GB Restriction specifically for Videos
+      if (type === 'video' && file.size > MAX_VIDEO_SIZE_BYTES) {
+        addToast(
+          'error',
+          'Video Exceeds 1.5 GB Limit',
+          `${file.name} is ${formatFileSize(file.size)}. Maximum allowed video size is 1.5 GB.`
+        );
+        continue;
+      }
+
+      // 2. Large Video Processing Warning (>300MB)
+      if (type === 'video' && file.size > 300 * 1024 * 1024) {
+        addToast('info', 'Large Video Warning', `${file.name} is >300MB. Video processing in browser WASM may take longer.`);
       }
 
       const id = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -550,7 +563,7 @@ export function App() {
       </main>
 
       <footer className="py-6 px-8 border-t border-slate-200 dark:border-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors duration-300">
-        <p>Compressify Studio PRO • 100% Client-Side Private Media Compressor & Converter</p>
+        <p>Compressify Studio PRO • 100% Client-Side Private Media Compressor & Converter (Videos up to 1.5 GB)</p>
       </footer>
 
       <ComparisonModal
