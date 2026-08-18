@@ -14,8 +14,6 @@ export const ComparisonModal: React.FC<ComparisonModalProps> = ({
   onClose,
   onDownload,
 }) => {
-  if (!item || !item.compressedUrl) return null;
-
   const [viewMode, setViewMode] = useState<'slider' | 'side_by_side'>('slider');
   const [sliderPosition, setSliderPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
@@ -23,6 +21,8 @@ export const ComparisonModal: React.FC<ComparisonModalProps> = ({
 
   const origVideoRef = useRef<HTMLVideoElement>(null);
   const compVideoRef = useRef<HTMLVideoElement>(null);
+
+  if (!item || !item.compressedUrl) return null;
 
   const isImage = item.type === 'image';
   const savings = item.compressedSize

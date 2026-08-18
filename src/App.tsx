@@ -564,8 +564,9 @@ export function App() {
 
       </main>
 
-      <footer className="py-6 px-8 border-t border-slate-200 dark:border-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors duration-300">
+      <footer className="py-6 px-8 border-t border-slate-200 dark:border-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors duration-300 space-y-1">
         <p>CrispCompress PRO • 100% Client-Side Private Media Compressor & Converter (Videos up to 1.5 GB)</p>
+        <p className="font-medium text-slate-400 dark:text-slate-500">© 2026 UG_SIDHARTH. All rights reserved.</p>
       </footer>
 
       <ComparisonModal
