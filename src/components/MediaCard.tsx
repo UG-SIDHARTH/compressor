@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   FileVideo, ImageIcon, Download, Trash2, Sliders, 
-  RotateCcw, Eye, Sparkles, AlertCircle, Clock, Zap
+  RotateCcw, Eye, Sparkles, AlertCircle, Clock, Zap, ArrowRight
 } from 'lucide-react';
 import type { MediaItem, MediaSettings, ImageFormat, VideoFormat, SocialPreset } from '../types/media';
 import { PRESETS } from '../types/media';
@@ -36,6 +36,8 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   const imageSettings = item.settings.image;
   const videoSettings = item.settings.video;
 
+  const targetFormat = isImage ? imageSettings.format : videoSettings.format;
+
   const spaceSaved = isCompleted && item.compressedSize
     ? calculateSpaceSaved(item.originalSize, item.compressedSize)
     : null;
@@ -60,6 +62,16 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     onUpdateSettings(item.id, {
       video: { ...videoSettings, [field]: value },
     });
+  };
+
+  const getVideoQualityLabel = (quality: string) => {
+    switch (quality) {
+      case 'high_quality': return 'High Quality';
+      case 'balanced': return 'Balanced Quality';
+      case 'small_size': return 'Small File Size';
+      case 'maximum_compression': return 'Max Compression';
+      default: return 'Balanced';
+    }
   };
 
   return (
@@ -136,17 +148,40 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               )}
             </div>
 
-            {/* Compressed Savings Pill */}
-            {isCompleted && spaceSaved && item.compressedSize && (
-              <div className="pt-1 flex items-center gap-2">
-                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
-                  {formatFileSize(item.compressedSize)}
+            {/* Prominent Target Format, Compression Type & Est. Size Badges */}
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              {/* Format Conversion Pill (e.g. MP4 → WEBM) */}
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/30 flex items-center gap-1.5 shadow-2xs">
+                <span>{item.originalFormat}</span>
+                <ArrowRight className="w-3 h-3 text-brand-500" />
+                <span className="text-slate-900 dark:text-white font-black">{targetFormat}</span>
+              </span>
+
+              {/* Compression Type Badge */}
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                {isImage
+                  ? imageSettings.resizeMode === 'preset'
+                    ? `Preset: ${PRESETS[imageSettings.preset]?.label.split(' ')[0]}`
+                    : imageSettings.resizeMode === 'percentage'
+                    ? `Scale: ${imageSettings.scalePercentage}%`
+                    : `${imageSettings.quality}% Quality`
+                  : getVideoQualityLabel(videoSettings.quality)}
+              </span>
+
+              {/* Estimated Size Preview */}
+              {item.estimatedSize && !isCompleted && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/30">
+                  Est. Output: ~{formatFileSize(item.estimatedSize)}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                  Saved {formatFileSize(spaceSaved.bytesSaved)} ({spaceSaved.percentage}%)
+              )}
+
+              {/* Completed Savings Pill */}
+              {isCompleted && spaceSaved && item.compressedSize && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                  Result: {formatFileSize(item.compressedSize)} (Saved {spaceSaved.percentage}%)
                 </span>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Error Output */}
             {isError && item.errorMessage && (
