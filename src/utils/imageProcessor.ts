@@ -9,17 +9,21 @@ export interface ImageDimensions {
 
 export function getImageDimensions(file: File): Promise<ImageDimensions> {
   return new Promise((resolve, reject) => {
+    if (file.size === 0) {
+      return reject(new Error('Image file is empty (0 bytes).'));
+    }
+
     const img = new Image();
     const url = URL.createObjectURL(file);
     
     img.onload = () => {
       URL.revokeObjectURL(url);
-      resolve({ width: img.width, height: img.height });
+      resolve({ width: img.width || 800, height: img.height || 600 });
     };
     
-    img.onerror = (err) => {
+    img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(err);
+      reject(new Error('Failed to load image file. File may be corrupted or invalid format.'));
     };
     
     img.src = url;
@@ -31,14 +35,17 @@ export function calculateTargetDimensions(
   originalHeight: number,
   settings: ImageSettings
 ): ImageDimensions {
+  const origW = originalWidth > 0 ? originalWidth : 1000;
+  const origH = originalHeight > 0 ? originalHeight : 1000;
+  const aspectRatio = origW / origH;
+
   const { resizeMode, targetWidth, targetHeight, scalePercentage, preset, maintainAspectRatio } = settings;
-  const aspectRatio = originalWidth / originalHeight;
 
   if (resizeMode === 'percentage') {
-    const scale = Math.max(10, Math.min(200, scalePercentage)) / 100;
+    const scale = Math.max(10, Math.min(200, scalePercentage || 100)) / 100;
     return {
-      width: Math.round(originalWidth * scale),
-      height: Math.round(originalHeight * scale),
+      width: Math.max(1, Math.round(origW * scale)),
+      height: Math.max(1, Math.round(origH * scale)),
     };
   }
 
@@ -59,8 +66,8 @@ export function calculateTargetDimensions(
     }
   }
 
-  let finalWidth = targetWidth > 0 ? targetWidth : originalWidth;
-  let finalHeight = targetHeight > 0 ? targetHeight : originalHeight;
+  let finalWidth = targetWidth > 0 ? targetWidth : origW;
+  let finalHeight = targetHeight > 0 ? targetHeight : origH;
 
   if (maintainAspectRatio) {
     if (targetWidth > 0 && (!targetHeight || targetHeight <= 0)) {
@@ -83,16 +90,18 @@ export function estimateImageSize(
   settings: ImageSettings
 ): number {
   const { width: targetW, height: targetH } = calculateTargetDimensions(originalWidth, originalHeight, settings);
-  const pixelRatio = (targetW * targetH) / (originalWidth * originalHeight);
-  const q = settings.quality / 100;
+  const origW = originalWidth > 0 ? originalWidth : 1;
+  const origH = originalHeight > 0 ? originalHeight : 1;
+  const pixelRatio = (targetW * targetH) / (origW * origH);
+  const q = (settings.quality || 80) / 100;
 
   let formatFactor = 1.0;
   if (settings.format === 'webp') {
-    formatFactor = 0.55 + q * 0.35;
+    formatFactor = 0.5 + q * 0.35;
   } else if (settings.format === 'jpeg') {
-    formatFactor = 0.6 + q * 0.4;
+    formatFactor = 0.55 + q * 0.4;
   } else if (settings.format === 'png') {
-    formatFactor = 0.95;
+    formatFactor = 0.9;
   } else if (settings.format === 'gif') {
     formatFactor = 0.85;
   }
@@ -101,14 +110,27 @@ export function estimateImageSize(
   return Math.max(1024, Math.min(estimated, originalSize * 1.5));
 }
 
+/**
+ * Compress, resize, and convert image with browser fallback handling for GIF
+ */
 export async function processImage(
   file: File,
   settings: ImageSettings,
   originalWidth: number,
   originalHeight: number
 ): Promise<{ blob: Blob; width: number; height: number }> {
+  if (file.size === 0) {
+    throw new Error('Image file is empty (0 bytes). Cannot process.');
+  }
+
   const targetDims = calculateTargetDimensions(originalWidth, originalHeight, settings);
-  const imgBitmap = await createImageBitmap(file);
+  
+  let imgBitmap: ImageBitmap | null = null;
+  try {
+    imgBitmap = await createImageBitmap(file);
+  } catch (err: any) {
+    throw new Error(`Failed to decode image: ${err?.message || 'Corrupted or unsupported image file'}`);
+  }
   
   const canvas = document.createElement('canvas');
   canvas.width = targetDims.width;
@@ -116,7 +138,8 @@ export async function processImage(
   
   const ctx = canvas.getContext('2d');
   if (!ctx) {
-    throw new Error('Canvas 2D context could not be created');
+    imgBitmap.close();
+    throw new Error('Canvas 2D context creation failed.');
   }
 
   ctx.imageSmoothingEnabled = true;
@@ -128,14 +151,19 @@ export async function processImage(
   }
 
   ctx.drawImage(imgBitmap, 0, 0, targetDims.width, targetDims.height);
+  imgBitmap.close();
   
-  const mimeType = getMimeType(settings.format);
-  const qualityVal = settings.quality / 100;
+  // Browsers don't support canvas.toBlob('image/gif') export natively; fallback to PNG/JPEG
+  let mimeType = getMimeType(settings.format);
+  if (settings.format === 'gif') {
+    mimeType = 'image/png'; // PNG fallback for canvas gif export
+  }
+
+  const qualityVal = (settings.quality || 80) / 100;
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
-        imgBitmap.close();
         if (blob) {
           resolve({
             blob,
@@ -143,7 +171,18 @@ export async function processImage(
             height: targetDims.height,
           });
         } else {
-          reject(new Error('Failed to generate image blob from canvas'));
+          // Fallback to image/png if toBlob fails
+          canvas.toBlob((fallbackBlob) => {
+            if (fallbackBlob) {
+              resolve({
+                blob: fallbackBlob,
+                width: targetDims.width,
+                height: targetDims.height,
+              });
+            } else {
+              reject(new Error('Failed to generate image blob from canvas.'));
+            }
+          }, 'image/png');
         }
       },
       mimeType,

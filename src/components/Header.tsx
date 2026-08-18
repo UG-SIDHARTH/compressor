@@ -1,71 +1,113 @@
 import React from 'react';
-import { Sun, Moon, ShieldCheck, Zap, Sparkles, Cpu } from 'lucide-react';
+import { Sun, Moon, Sparkles, ChevronDown, Layers, ArrowLeft } from 'lucide-react';
 
 interface HeaderProps {
   darkMode: boolean;
   onToggleDarkMode: () => void;
   onLoadSamples: () => void;
-  ffmpegStatus: string;
+  onGoToHub: () => void;
+  activeView: 'hub' | 'workspace';
+  selectedToolName?: string;
+  ffmpegStatus?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   darkMode,
   onToggleDarkMode,
   onLoadSamples,
-  ffmpegStatus,
+  onGoToHub,
+  activeView,
+  selectedToolName,
 }) => {
   return (
-    <header className="sticky top-0 z-30 glass-panel border-b border-slate-200 dark:border-slate-800 py-4 px-4 sm:px-8">
+    <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0B0F19]/90 text-slate-800 dark:text-slate-100 border-b border-slate-200 dark:border-slate-800/80 px-4 sm:px-8 py-3.5 shadow-sm dark:shadow-2xl backdrop-blur-md transition-colors duration-300">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
         
-        {/* Brand & Title */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-brand-500/20 text-white">
-            <Zap className="w-6 h-6 animate-pulse-slow" />
+        {/* Brand & Nav items */}
+        <div className="flex items-center gap-6 w-full md:w-auto justify-between md:justify-start">
+          
+          {/* Logo Badge */}
+          <div 
+            onClick={onGoToHub} 
+            className="flex items-center gap-3 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-rose-500 via-orange-500 to-amber-400 flex items-center justify-center shadow-lg shadow-orange-500/20 text-white group-hover:scale-105 transition-transform">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xl font-black tracking-tight text-slate-900 dark:text-white font-sans">
+                Compressify
+              </span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black tracking-wider uppercase bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 dark:border-rose-500/40">
+                PRO
+              </span>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight gradient-text">
-              Compressify Studio
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Client-Side Video & Image Compression & Conversion
-            </p>
-          </div>
+
+          {/* Nav Links */}
+          <nav className="hidden lg:flex items-center gap-6 text-xs font-bold tracking-wider text-slate-600 dark:text-slate-300">
+            <button
+              onClick={onGoToHub}
+              className={`hover:text-slate-900 dark:hover:text-white transition-colors ${activeView === 'hub' ? 'text-slate-900 dark:text-white underline underline-offset-8 decoration-rose-500 decoration-2 font-black' : ''}`}
+            >
+              ALL MEDIA TOOLS
+            </button>
+            {activeView === 'workspace' && selectedToolName && (
+              <div className="flex items-center gap-2 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 px-3 py-1 rounded-full border border-rose-200 dark:border-rose-500/30">
+                <span>Active Tool:</span>
+                <span className="text-slate-900 dark:text-white">{selectedToolName}</span>
+              </div>
+            )}
+          </nav>
+
         </div>
 
-        {/* Badges & Actions */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Privacy Badge */}
-          <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-            <ShieldCheck className="w-4 h-4" />
-            <span>100% Private & In-Browser</span>
-          </div>
-
-          {/* Engine Status */}
-          <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            <Cpu className="w-3.5 h-3.5 text-brand-500" />
-            <span>{ffmpegStatus || 'WASM Engine Ready'}</span>
-          </div>
+        {/* Action Controls & Hub Toggle */}
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+          
+          {/* Back to All Tools / All Tools Hub Button */}
+          {activeView === 'workspace' ? (
+            <button
+              onClick={onGoToHub}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold bg-slate-100 dark:bg-[#141A29] text-rose-600 dark:text-rose-300 border border-rose-300 dark:border-rose-500/40 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all shadow-sm"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to All Tools</span>
+            </button>
+          ) : (
+            <button
+              onClick={onGoToHub}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold bg-rose-50 dark:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-500/50 shadow-sm"
+            >
+              <span>ALL MEDIA TOOLS</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           {/* Load Sample Files Button */}
           <button
             onClick={onLoadSamples}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-700 hover:to-indigo-700 shadow-md hover:shadow-indigo-500/25 transition-all duration-200 active:scale-95"
-            title="Load sample media files to test instantly without uploading"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white hover:from-purple-500 hover:to-indigo-500 shadow-md shadow-indigo-500/20 active:scale-95 transition-all"
+            title="Load high-res sample media to test instantly"
           >
-            <Sparkles className="w-4 h-4" />
-            <span>Try Sample Files</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Try Samples</span>
           </button>
 
           {/* Dark / Light Toggle */}
           <button
             onClick={onToggleDarkMode}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500"
+            className="p-2.5 rounded-xl bg-slate-100 dark:bg-[#141A29] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors border border-slate-300 dark:border-slate-800 shadow-sm"
             aria-label="Toggle theme"
-            title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            title={darkMode ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
           >
-            {darkMode ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-slate-600" />}
+            {darkMode ? (
+              <Sun className="w-4 h-4 text-amber-400" />
+            ) : (
+              <Moon className="w-4 h-4 text-slate-600" />
+            )}
           </button>
+
         </div>
 
       </div>

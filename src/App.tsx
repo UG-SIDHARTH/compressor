@@ -10,6 +10,8 @@ import { downloadAllAsZip, downloadSingleFile } from './utils/zipPackager';
 import { createSampleImageFiles } from './utils/sampleMedia';
 
 import { Header } from './components/Header';
+import { ToolsHub } from './components/ToolsHub';
+import { ToolWorkspaceHeader } from './components/ToolWorkspaceHeader';
 import { UploadZone } from './components/UploadZone';
 import { BatchToolbar } from './components/BatchToolbar';
 import { MediaCard } from './components/MediaCard';
@@ -22,6 +24,9 @@ export function App() {
     return localStorage.getItem('theme') === 'dark' || 
       (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
   });
+
+  const [activeView, setActiveView] = useState<'hub' | 'workspace'>('hub');
+  const [selectedTool, setSelectedTool] = useState<any>(null);
 
   const [items, setItems] = useState<MediaItem[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -39,6 +44,20 @@ export function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [darkMode]);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      items.forEach((item) => {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        if (item.compressedUrl) URL.revokeObjectURL(item.compressedUrl);
+      });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [items]);
 
   const addToast = (type: 'success' | 'error' | 'info', title: string, message?: string) => {
     const id = Date.now().toString() + Math.random();
@@ -59,9 +78,18 @@ export function App() {
     const newItems: MediaItem[] = [];
 
     for (const file of files) {
+      if (file.size === 0) {
+        addToast('error', 'Empty File Ignored', `${file.name} is 0 bytes and cannot be processed.`);
+        continue;
+      }
+
+      if (file.size > 300 * 1024 * 1024) {
+        addToast('info', 'Large File Warning', `${file.name} is >300MB. Processing in browser WASM may take longer.`);
+      }
+
       const type = getMediaTypeFromExtension(file.name);
       if (type === 'unsupported') {
-        addToast('error', 'Unsupported File Type', `${file.name} is not a supported image or video format.`);
+        addToast('error', 'Unsupported Format', `${file.name} is not a supported video or photo format.`);
         continue;
       }
 
@@ -90,15 +118,32 @@ export function App() {
         resolution: 'original',
       };
 
+      if (selectedTool?.payload) {
+        if (type === 'image' && selectedTool.actionType === 'preset_image') {
+          Object.assign(defaultImageSettings, selectedTool.payload);
+        }
+        if (type === 'video' && selectedTool.actionType === 'preset_video') {
+          Object.assign(defaultVideoSettings, selectedTool.payload);
+        }
+        if (type === 'image' && selectedTool.actionType === 'resize') {
+          Object.assign(defaultImageSettings, selectedTool.payload);
+        }
+      }
+
       if (type === 'image') {
         try {
           const dims = await getImageDimensions(file);
           originalWidth = dims.width;
           originalHeight = dims.height;
-          defaultImageSettings.targetWidth = dims.width;
-          defaultImageSettings.targetHeight = dims.height;
-        } catch {
-          // Fallback
+          if (defaultImageSettings.targetWidth === 0) {
+            defaultImageSettings.targetWidth = dims.width;
+          }
+          if (defaultImageSettings.targetHeight === 0) {
+            defaultImageSettings.targetHeight = dims.height;
+          }
+        } catch (err: any) {
+          addToast('error', 'Invalid Image File', `${file.name}: ${err.message || 'Corrupted file'}`);
+          continue;
         }
       } else if (type === 'video') {
         try {
@@ -107,7 +152,7 @@ export function App() {
           originalWidth = meta.width;
           originalHeight = meta.height;
         } catch {
-          // Fallback
+          // Fallback metadata
         }
       }
 
@@ -148,12 +193,71 @@ export function App() {
 
   const handleLoadSamples = async () => {
     try {
-      addToast('info', 'Loading Sample Media...', 'Generating high-res test images in memory');
+      addToast('info', 'Loading Sample Media...', 'Generating test images in memory');
       const sampleFiles = await createSampleImageFiles();
       await handleFilesSelected(sampleFiles);
+      if (activeView === 'hub') {
+        setActiveView('workspace');
+      }
     } catch (err: any) {
       addToast('error', 'Sample Loading Failed', err.message);
     }
+  };
+
+  const handleSelectTool = (tool: any) => {
+    if (tool.id === 'load_samples') {
+      handleLoadSamples();
+      return;
+    }
+
+    if (tool.id === 'zip_download') {
+      handleDownloadAllZip();
+      return;
+    }
+
+    setSelectedTool(tool);
+    setActiveView('workspace');
+
+    if (tool.actionType === 'preset_image' && tool.payload) {
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.type !== 'image') return item;
+          const newImg = { ...item.settings.image, ...tool.payload };
+          const est = item.originalWidth && item.originalHeight
+            ? estimateImageSize(item.originalSize, item.originalWidth, item.originalHeight, newImg)
+            : item.estimatedSize;
+          return { ...item, settings: { ...item.settings, image: newImg }, estimatedSize: est };
+        })
+      );
+    }
+
+    if (tool.actionType === 'preset_video' && tool.payload) {
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.type !== 'video') return item;
+          const newVid = { ...item.settings.video, ...tool.payload };
+          const est = item.duration
+            ? estimateVideoSize(item.originalSize, item.duration, newVid)
+            : item.estimatedSize;
+          return { ...item, settings: { ...item.settings, video: newVid }, estimatedSize: est };
+        })
+      );
+    }
+
+    if (tool.actionType === 'resize' && tool.payload) {
+      setItems((prev) =>
+        prev.map((item) => {
+          if (item.type !== 'image') return item;
+          const newImg = { ...item.settings.image, ...tool.payload };
+          const est = item.originalWidth && item.originalHeight
+            ? estimateImageSize(item.originalSize, item.originalWidth, item.originalHeight, newImg)
+            : item.estimatedSize;
+          return { ...item, settings: { ...item.settings, image: newImg }, estimatedSize: est };
+        })
+      );
+    }
+
+    addToast('info', `Opened Tool: ${tool.label}`, tool.description);
   };
 
   const handleUpdateSettings = (id: string, updatedSettings: Partial<MediaSettings>) => {
@@ -227,8 +331,18 @@ export function App() {
     const item = items.find((i) => i.id === id);
     if (!item) return false;
 
+    const startTime = Date.now();
+
+    // Start live 1-second interval timer for live elapsed update
+    const timer = setInterval(() => {
+      const elapsed = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+      setItems((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, elapsedSeconds: elapsed } : i))
+      );
+    }, 1000);
+
     setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, status: 'processing', progress: 5, errorMessage: undefined } : i))
+      prev.map((i) => (i.id === id ? { ...i, status: 'processing', progress: 5, startTime, elapsedSeconds: 0, errorMessage: undefined } : i))
     );
 
     try {
@@ -238,6 +352,7 @@ export function App() {
         
         const result = await processImage(item.file, item.settings.image, origW, origH);
         const compressedUrl = URL.createObjectURL(result.blob);
+        const processingTimeMs = Date.now() - startTime;
 
         setItems((prev) =>
           prev.map((i) =>
@@ -251,6 +366,7 @@ export function App() {
                   compressedUrl,
                   compressedWidth: result.width,
                   compressedHeight: result.height,
+                  processingTimeMs,
                 }
               : i
           )
@@ -270,6 +386,7 @@ export function App() {
         );
 
         const compressedUrl = URL.createObjectURL(result.blob);
+        const processingTimeMs = Date.now() - startTime;
 
         setItems((prev) =>
           prev.map((i) =>
@@ -281,6 +398,7 @@ export function App() {
                   compressedBlob: result.blob,
                   compressedSize: result.blob.size,
                   compressedUrl,
+                  processingTimeMs,
                 }
               : i
           )
@@ -298,6 +416,8 @@ export function App() {
         )
       );
       return false;
+    } finally {
+      clearInterval(timer);
     }
   };
 
@@ -324,7 +444,7 @@ export function App() {
         spread: 70,
         origin: { y: 0.6 },
       });
-      addToast('success', 'Batch Processing Complete!', `Successfully compressed ${completedCount} file(s).`);
+      addToast('success', 'Batch Processing Complete!', `Successfully processed ${completedCount} file(s).`);
     } else {
       addToast('error', 'Batch Processing Failed', 'One or more files encountered errors.');
     }
@@ -361,54 +481,76 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-slate-100 dark:bg-[#080B11] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-300">
       <Header
         darkMode={darkMode}
         onToggleDarkMode={() => setDarkMode(!darkMode)}
         onLoadSamples={handleLoadSamples}
+        onGoToHub={() => setActiveView('hub')}
+        activeView={activeView}
+        selectedToolName={selectedTool?.label}
         ffmpegStatus={ffmpegStatus}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-8 space-y-8">
-        <UploadZone onFilesSelected={handleFilesSelected} />
+        
+        {/* PAGE 1: ALL TOOLS HUB DIRECTORY */}
+        {activeView === 'hub' && (
+          <ToolsHub onSelectTool={handleSelectTool} />
+        )}
 
-        <BatchToolbar
-          items={items}
-          isProcessing={isProcessing}
-          overallProgress={overallProgress}
-          onCompressAll={handleCompressAll}
-          onDownloadAllZip={handleDownloadAllZip}
-          onClearAll={handleClearAll}
-          onApplyGlobalImageFormat={handleApplyGlobalImageFormat}
-          onApplyGlobalVideoFormat={handleApplyGlobalVideoFormat}
-        />
+        {/* PAGE 2: DEDICATED TOOL WORKSPACE */}
+        {activeView === 'workspace' && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            {selectedTool && (
+              <ToolWorkspaceHeader
+                tool={selectedTool}
+                onBackToHub={() => setActiveView('hub')}
+              />
+            )}
 
-        {items.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
-              File Processing Queue ({items.length})
-            </h3>
+            <UploadZone onFilesSelected={handleFilesSelected} />
 
-            <div className="grid grid-cols-1 gap-4">
-              {items.map((item) => (
-                <MediaCard
-                  key={item.id}
-                  item={item}
-                  onUpdateSettings={handleUpdateSettings}
-                  onProcessItem={(id) => processSingleItem(id)}
-                  onRemoveItem={handleRemoveItem}
-                  onOpenComparison={(item) => setComparisonItem(item)}
-                  onDownloadItem={(item) => downloadSingleFile(item)}
-                  isProcessing={isProcessing}
-                />
-              ))}
-            </div>
+            <BatchToolbar
+              items={items}
+              isProcessing={isProcessing}
+              overallProgress={overallProgress}
+              onCompressAll={handleCompressAll}
+              onDownloadAllZip={handleDownloadAllZip}
+              onClearAll={handleClearAll}
+              onApplyGlobalImageFormat={handleApplyGlobalImageFormat}
+              onApplyGlobalVideoFormat={handleApplyGlobalVideoFormat}
+            />
+
+            {items.length > 0 && (
+              <div className="space-y-4">
+                <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">
+                  File Processing Queue ({items.length})
+                </h3>
+
+                <div className="grid grid-cols-1 gap-4">
+                  {items.map((item) => (
+                    <MediaCard
+                      key={item.id}
+                      item={item}
+                      onUpdateSettings={handleUpdateSettings}
+                      onProcessItem={(id) => processSingleItem(id)}
+                      onRemoveItem={handleRemoveItem}
+                      onOpenComparison={(item) => setComparisonItem(item)}
+                      onDownloadItem={(item) => downloadSingleFile(item)}
+                      isProcessing={isProcessing}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
+
       </main>
 
-      <footer className="py-6 px-8 border-t border-slate-200 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
-        <p>Compressify Studio • 100% Client-Side Private Media Compressor & Converter • Built with React & FFmpeg WASM</p>
+      <footer className="py-6 px-8 border-t border-slate-200 dark:border-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 transition-colors duration-300">
+        <p>Compressify Studio PRO • 100% Client-Side Private Media Compressor & Converter</p>
       </footer>
 
       <ComparisonModal

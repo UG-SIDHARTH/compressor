@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
 import { 
-  Film, Image as ImageIcon, Play, Download, Trash2, Sliders, Eye, 
-  CheckCircle, AlertCircle, RefreshCw, Lock, Unlock
+  FileVideo, ImageIcon, Download, Trash2, Sliders, 
+  RotateCcw, Eye, Sparkles, AlertCircle, Clock, Zap
 } from 'lucide-react';
-import type { 
-  MediaItem, ImageFormat, VideoFormat, VideoQuality, ResizeMode, PresetDimension 
-} from '../types/media';
+import type { MediaItem, MediaSettings, ImageFormat, VideoFormat, SocialPreset } from '../types/media';
 import { PRESETS } from '../types/media';
 import { formatFileSize, formatDuration, calculateSpaceSaved } from '../utils/formatHelpers';
 
 interface MediaCardProps {
   item: MediaItem;
-  onUpdateSettings: (id: string, updatedSettings: Partial<MediaItem['settings']>) => void;
+  onUpdateSettings: (id: string, settings: Partial<MediaSettings>) => void;
   onProcessItem: (id: string) => void;
   onRemoveItem: (id: string) => void;
   onOpenComparison: (item: MediaItem) => void;
@@ -28,125 +26,185 @@ export const MediaCard: React.FC<MediaCardProps> = ({
   onDownloadItem,
   isProcessing,
 }) => {
-  const [showSettings, setShowSettings] = useState(true);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   const isImage = item.type === 'image';
-  const imgSettings = item.settings.image;
-  const vidSettings = item.settings.video;
+  const isCompleted = item.status === 'completed';
+  const isItemProcessing = item.status === 'processing';
+  const isError = item.status === 'error';
 
-  const savings = item.status === 'completed' && item.compressedSize
+  const imageSettings = item.settings.image;
+  const videoSettings = item.settings.video;
+
+  const spaceSaved = isCompleted && item.compressedSize
     ? calculateSpaceSaved(item.originalSize, item.compressedSize)
     : null;
 
+  // Calculate live ETA
+  const calculateETA = () => {
+    if (!item.elapsedSeconds || item.progress <= 0 || item.progress >= 100) return null;
+    const totalEstSecs = (item.elapsedSeconds / item.progress) * 100;
+    const remainingSecs = Math.max(1, Math.round(totalEstSecs - item.elapsedSeconds));
+    return remainingSecs;
+  };
+
+  const etaSeconds = calculateETA();
+
+  const handleImageSettingChange = (field: string, value: any) => {
+    onUpdateSettings(item.id, {
+      image: { ...imageSettings, [field]: value },
+    });
+  };
+
+  const handleVideoSettingChange = (field: string, value: any) => {
+    onUpdateSettings(item.id, {
+      video: { ...videoSettings, [field]: value },
+    });
+  };
+
   return (
-    <div className={`glass-card rounded-3xl overflow-hidden border transition-all duration-300 ${
-      item.status === 'completed'
-        ? 'border-emerald-500/30 bg-emerald-50/10 dark:bg-emerald-950/10'
-        : item.status === 'error'
-        ? 'border-rose-500/30 bg-rose-50/10 dark:bg-rose-950/10'
-        : 'border-slate-200 dark:border-slate-800'
+    <div className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-md ${
+      isCompleted
+        ? 'bg-white dark:bg-[#0F1626] border-emerald-500/40 dark:border-emerald-500/30'
+        : isError
+        ? 'bg-white dark:bg-[#150F14] border-rose-500/40 dark:border-rose-500/30'
+        : 'bg-white dark:bg-[#0D121F] border-slate-200 dark:border-slate-800'
     }`}>
-      
-      <div className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800/60">
+      {/* Main Item Row Header */}
+      <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         
-        <div className="flex items-center gap-4 min-w-0 w-full sm:w-auto">
-          <div className="relative w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0 border border-slate-200 dark:border-slate-700 flex items-center justify-center">
-            {isImage ? (
+        {/* Left Side: Thumbnail & File Info */}
+        <div className="flex items-center gap-4 min-w-0 flex-1">
+          {/* Thumbnail / Icon Badge */}
+          <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0 border border-slate-200 dark:border-slate-700 flex items-center justify-center group">
+            {item.previewUrl && isImage ? (
               <img
                 src={item.previewUrl}
                 alt={item.name}
                 className="w-full h-full object-cover"
               />
+            ) : item.previewUrl && !isImage ? (
+              <video src={item.previewUrl} className="w-full h-full object-cover" />
             ) : (
-              <video
-                src={item.previewUrl}
-                className="w-full h-full object-cover"
-                muted
-              />
+              <div className="text-slate-400">
+                {isImage ? <ImageIcon className="w-6 h-6" /> : <FileVideo className="w-6 h-6" />}
+              </div>
             )}
-            <div className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white backdrop-blur-xs">
-              {isImage ? <ImageIcon className="w-3 h-3" /> : <Film className="w-3 h-3 text-brand-400" />}
-            </div>
+
+            <span className="absolute bottom-1 right-1 px-1 py-0.2 rounded text-[9px] font-black uppercase bg-black/70 text-white backdrop-blur-xs">
+              {item.originalFormat}
+            </span>
           </div>
 
-          <div className="min-w-0 flex-1">
-            <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate" title={item.name}>
-              {item.name}
-            </h4>
-            <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
-              <span className="uppercase font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                {item.originalFormat}
-              </span>
-              <span>{formatFileSize(item.originalSize)}</span>
-              {item.originalWidth && item.originalHeight && (
-                <span>• {item.originalWidth}×{item.originalHeight}px</span>
-              )}
-              {item.duration !== undefined && item.duration > 0 && (
-                <span>• {formatDuration(item.duration)}</span>
+          {/* Details */}
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-extrabold text-slate-900 dark:text-white truncate" title={item.name}>
+                {item.name}
+              </h4>
+              {isCompleted && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Ready
+                </span>
               )}
             </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
+              <span>{formatFileSize(item.originalSize)}</span>
+              {item.originalWidth && item.originalHeight && (
+                <>
+                  <span>•</span>
+                  <span>{item.originalWidth} × {item.originalHeight} px</span>
+                </>
+              )}
+              {item.duration && item.duration > 0 && (
+                <>
+                  <span>•</span>
+                  <span>{formatDuration(item.duration)}</span>
+                </>
+              )}
+
+              {/* Processing Time Execution Badge */}
+              {isCompleted && item.processingTimeMs && (
+                <>
+                  <span>•</span>
+                  <span className="px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30 font-bold text-[11px] flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-amber-500" />
+                    {(item.processingTimeMs / 1000).toFixed(1)}s
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Compressed Savings Pill */}
+            {isCompleted && spaceSaved && item.compressedSize && (
+              <div className="pt-1 flex items-center gap-2">
+                <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                  {formatFileSize(item.compressedSize)}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                  Saved {formatFileSize(spaceSaved.bytesSaved)} ({spaceSaved.percentage}%)
+                </span>
+              </div>
+            )}
+
+            {/* Error Output */}
+            {isError && item.errorMessage && (
+              <div className="pt-1 flex items-center gap-1.5 text-xs text-rose-600 dark:text-rose-400 font-bold">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span className="line-clamp-1">{item.errorMessage}</span>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          {item.status === 'completed' && (
-            <>
-              <button
-                onClick={() => onOpenComparison(item)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/60 border border-brand-200 dark:border-brand-800 transition-colors"
-                title="Compare Original vs Compressed result"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Compare</span>
-              </button>
-
-              <button
-                onClick={() => onDownloadItem(item)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-500/20 active:scale-95 transition-all"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Download</span>
-              </button>
-            </>
-          )}
-
-          {item.status === 'idle' && (
+        {/* Right Side: Quick Action Buttons */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
+          {/* Compare Button */}
+          {isCompleted && (
             <button
-              onClick={() => onProcessItem(item.id)}
-              disabled={isProcessing}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white shadow-md shadow-brand-500/20 active:scale-95 transition-all disabled:opacity-50"
+              onClick={() => onOpenComparison(item)}
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              title="Compare Before & After"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Process</span>
+              <Eye className="w-4 h-4" />
             </button>
           )}
 
-          {item.status === 'error' && (
+          {/* Single Download */}
+          {isCompleted ? (
+            <button
+              onClick={() => onDownloadItem(item)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 transition-all"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download</span>
+            </button>
+          ) : (
             <button
               onClick={() => onProcessItem(item.id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-rose-600 text-white hover:bg-rose-500 transition-colors"
+              disabled={isProcessing || isItemProcessing}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-extrabold bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-50 transition-all"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retry</span>
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{isError ? 'Retry' : 'Compress'}</span>
             </button>
           )}
 
+          {/* Toggle Expand Settings */}
           <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-xl text-xs transition-colors ${
-              showSettings 
-                ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100' 
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-            }`}
-            title="Toggle Settings"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+            title="Adjust Quality & Resize Settings"
           >
             <Sliders className="w-4 h-4" />
           </button>
 
+          {/* Delete Button */}
           <button
             onClick={() => onRemoveItem(item.id)}
-            disabled={item.status === 'processing'}
-            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors disabled:opacity-40"
+            disabled={isItemProcessing}
+            className="p-2 rounded-xl text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
             title="Remove item"
           >
             <Trash2 className="w-4 h-4" />
@@ -155,304 +213,255 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
       </div>
 
-      {showSettings && (
-        <div className="p-5 bg-slate-50/50 dark:bg-slate-900/30 space-y-4">
-          
-          {isImage ? (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Target Format
-                </label>
-                <select
-                  value={imgSettings.format}
-                  onChange={(e) =>
-                    onUpdateSettings(item.id, {
-                      image: { ...imgSettings, format: e.target.value as ImageFormat },
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-xl text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="webp">WebP (Recommended - Smallest)</option>
-                  <option value="jpeg">JPEG / JPG (Standard)</option>
-                  <option value="png">PNG (Lossless / Transparent)</option>
-                  <option value="gif">GIF</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <label className="font-bold text-slate-700 dark:text-slate-300">Quality</label>
-                  <span className="font-extrabold text-brand-600 dark:text-brand-400">{imgSettings.quality}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="5"
-                  max="100"
-                  value={imgSettings.quality}
-                  onChange={(e) =>
-                    onUpdateSettings(item.id, {
-                      image: { ...imgSettings, quality: parseInt(e.target.value) },
-                    })
-                  }
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-600"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Resize Mode
-                </label>
-                <select
-                  value={imgSettings.resizeMode}
-                  onChange={(e) =>
-                    onUpdateSettings(item.id, {
-                      image: { ...imgSettings, resizeMode: e.target.value as ResizeMode },
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-xl text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="custom">Original / Custom Pixels</option>
-                  <option value="percentage">Percentage Scale (%)</option>
-                  <option value="preset">Social & HD Presets</option>
-                </select>
-              </div>
-
-              {imgSettings.resizeMode === 'percentage' && (
-                <div className="col-span-full flex items-center gap-3 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Scale:</span>
-                  <div className="flex items-center gap-2 flex-1">
-                    {[25, 50, 75, 100].map((pct) => (
-                      <button
-                        key={pct}
-                        type="button"
-                        onClick={() =>
-                          onUpdateSettings(item.id, {
-                            image: { ...imgSettings, scalePercentage: pct },
-                          })
-                        }
-                        className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                          imgSettings.scalePercentage === pct
-                            ? 'bg-brand-600 text-white shadow-sm'
-                            : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-                        }`}
-                      >
-                        {pct}%
-                      </button>
-                    ))}
-                    <input
-                      type="number"
-                      min="10"
-                      max="200"
-                      value={imgSettings.scalePercentage}
-                      onChange={(e) =>
-                        onUpdateSettings(item.id, {
-                          image: { ...imgSettings, scalePercentage: parseInt(e.target.value) || 100 },
-                        })
-                      }
-                      className="w-16 px-2 py-1 rounded-lg text-xs border border-slate-300 dark:border-slate-600 bg-transparent text-center font-bold"
-                    />
-                    <span className="text-xs font-semibold">%</span>
-                  </div>
-                </div>
-              )}
-
-              {imgSettings.resizeMode === 'preset' && (
-                <div className="col-span-full bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Select Preset Dimensions
-                  </label>
-                  <select
-                    value={imgSettings.preset}
-                    onChange={(e) =>
-                      onUpdateSettings(item.id, {
-                        image: { ...imgSettings, preset: e.target.value as PresetDimension },
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-xl text-xs font-medium bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                  >
-                    {Object.values(PRESETS).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label} ({p.description})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {imgSettings.resizeMode === 'custom' && (
-                <div className="col-span-full flex flex-wrap items-center gap-4 bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-200 dark:border-slate-700">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">W:</span>
-                    <input
-                      type="number"
-                      placeholder="Auto"
-                      value={imgSettings.targetWidth || ''}
-                      onChange={(e) =>
-                        onUpdateSettings(item.id, {
-                          image: { ...imgSettings, targetWidth: parseInt(e.target.value) || 0 },
-                        })
-                      }
-                      className="w-24 px-2 py-1 rounded-lg text-xs border border-slate-300 dark:border-slate-600 bg-transparent text-slate-800 dark:text-slate-100 font-semibold"
-                    />
-                    <span className="text-xs text-slate-400">px</span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">H:</span>
-                    <input
-                      type="number"
-                      placeholder="Auto"
-                      value={imgSettings.targetHeight || ''}
-                      onChange={(e) =>
-                        onUpdateSettings(item.id, {
-                          image: { ...imgSettings, targetHeight: parseInt(e.target.value) || 0 },
-                        })
-                      }
-                      className="w-24 px-2 py-1 rounded-lg text-xs border border-slate-300 dark:border-slate-600 bg-transparent text-slate-800 dark:text-slate-100 font-semibold"
-                    />
-                    <span className="text-xs text-slate-400">px</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onUpdateSettings(item.id, {
-                        image: { ...imgSettings, maintainAspectRatio: !imgSettings.maintainAspectRatio },
-                      })
-                    }
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold transition-colors ${
-                      imgSettings.maintainAspectRatio
-                        ? 'bg-brand-50 dark:bg-brand-950/50 text-brand-600 dark:text-brand-400 border border-brand-300 dark:border-brand-700'
-                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
-                    }`}
-                  >
-                    {imgSettings.maintainAspectRatio ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                    <span>Maintain Aspect Ratio</span>
-                  </button>
-                </div>
-              )}
-
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Target Format
-                </label>
-                <select
-                  value={vidSettings.format}
-                  onChange={(e) =>
-                    onUpdateSettings(item.id, {
-                      video: { ...vidSettings, format: e.target.value as VideoFormat },
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-xl text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="mp4">MP4 (H.264 - Universal Compatibility)</option>
-                  <option value="webm">WebM (VP9 - High Web Efficiency)</option>
-                  <option value="mov">MOV (QuickTime)</option>
-                  <option value="mkv">MKV (Matroska)</option>
-                  <option value="avi">AVI</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Compression Quality
-                </label>
-                <select
-                  value={vidSettings.quality}
-                  onChange={(e) =>
-                    onUpdateSettings(item.id, {
-                      video: { ...vidSettings, quality: e.target.value as VideoQuality },
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-xl text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="high_quality">High Quality (Low Compression)</option>
-                  <option value="balanced">Balanced (Recommended)</option>
-                  <option value="small_size">Small File Size (High Compression)</option>
-                  <option value="maximum_compression">Maximum Compression (Smallest Size)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Resolution Output
-                </label>
-                <select
-                  value={vidSettings.resolution}
-                  onChange={(e) =>
-                    onUpdateSettings(item.id, {
-                      video: { ...vidSettings, resolution: e.target.value as any },
-                    })
-                  }
-                  className="w-full px-3 py-2 rounded-xl text-xs font-medium bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-brand-500"
-                >
-                  <option value="original">Original Resolution</option>
-                  <option value="1080p">1080p Full HD</option>
-                  <option value="720p">720p HD</option>
-                  <option value="480p">480p SD</option>
-                </select>
-              </div>
-
-            </div>
-          )}
-
-          {item.estimatedSize && item.status !== 'completed' && (
-            <div className="text-xs text-slate-600 dark:text-slate-400 font-medium flex items-center justify-between pt-1">
-              <span>Estimated output size: <strong className="text-brand-600 dark:text-brand-400 font-bold">{formatFileSize(item.estimatedSize)}</strong></span>
-              <span className="text-slate-400 text-[11px]">Est. change: ~{Math.round(((item.originalSize - item.estimatedSize) / item.originalSize) * 100)}%</span>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {item.status === 'processing' && (
-        <div className="p-4 bg-brand-50/80 dark:bg-brand-950/40 border-t border-brand-200/50 dark:border-brand-800/50 space-y-2">
-          <div className="flex justify-between items-center text-xs font-bold text-brand-700 dark:text-brand-300">
-            <span className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4 animate-spin" />
+      {/* Progress Bar with Live Elapsed Time & ETA */}
+      {isItemProcessing && (
+        <div className="px-5 pb-4 space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-400">
+            <div className="flex items-center gap-2">
+              <RotateCcw className="w-3.5 h-3.5 animate-spin text-brand-500" />
               <span>Processing local media...</span>
-            </span>
-            <span>{item.progress}%</span>
+              
+              {/* Live Elapsed & ETA Timing Display */}
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">
+                <Clock className="w-3 h-3 text-amber-500" />
+                <span>Elapsed: {item.elapsedSeconds || 1}s</span>
+                {etaSeconds !== null && (
+                  <>
+                    <span>•</span>
+                    <span className="text-brand-500 dark:text-brand-400">ETA: ~{etaSeconds}s</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <span className="text-brand-500 dark:text-brand-400 font-extrabold">{item.progress}%</span>
           </div>
-          <div className="w-full h-2 bg-brand-200 dark:bg-brand-900 rounded-full overflow-hidden">
+
+          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
             <div
-              className="h-full bg-brand-600 rounded-full transition-all duration-200"
+              className="bg-gradient-to-r from-brand-500 to-rose-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${item.progress}%` }}
             />
           </div>
         </div>
       )}
 
-      {item.status === 'completed' && item.compressedSize && savings && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border-t border-emerald-200 dark:border-emerald-800/60 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
-            <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Compressed Result: {formatFileSize(item.compressedSize)}</span>
-          </div>
+      {/* Expandable Settings Drawer */}
+      {isExpanded && (
+        <div className="p-5 bg-slate-50 dark:bg-[#0A0E18] border-t border-slate-200 dark:border-slate-800/80 space-y-5 animate-in slide-in-from-top-2 duration-200">
+          
+          {isImage ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Photo Format & Quality */}
+              <div className="space-y-4">
+                <h5 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Format & Quality Settings
+                </h5>
 
-          <div className={`px-3 py-1 rounded-full font-black text-xs ${
-            savings.isSmaller 
-              ? 'bg-emerald-500 text-white shadow-sm'
-              : 'bg-amber-500 text-white'
-          }`}>
-            {savings.isSmaller
-              ? `🟢 Saved ${formatFileSize(savings.bytesSaved)} (${savings.percentage}%)`
-              : `⚡ Output: ${formatFileSize(item.compressedSize)}`}
-          </div>
-        </div>
-      )}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Output Format
+                  </label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {(['webp', 'jpeg', 'png', 'gif'] as ImageFormat[]).map((fmt) => (
+                      <button
+                        key={fmt}
+                        onClick={() => handleImageSettingChange('format', fmt)}
+                        className={`py-1.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                          imageSettings.format === fmt
+                            ? 'bg-brand-500 text-white shadow-sm'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        }`}
+                      >
+                        {fmt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-      {item.status === 'error' && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/50 border-t border-rose-200 dark:border-rose-800/60 flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          <span>{item.errorMessage || 'Failed to process file. Please try again.'}</span>
+                {/* Quality Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-slate-700 dark:text-slate-300">Quality Compression</span>
+                    <span className="text-brand-500 dark:text-brand-400 font-extrabold">{imageSettings.quality}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    value={imageSettings.quality}
+                    onChange={(e) => handleImageSettingChange('quality', parseInt(e.target.value))}
+                    className="w-full accent-brand-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                    <span>Smallest File (10%)</span>
+                    <span>High Quality (100%)</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Photo Resizing Options */}
+              <div className="space-y-4">
+                <h5 className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Resizing Options
+                </h5>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => handleImageSettingChange('resizeMode', 'custom')}
+                    className={`py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      imageSettings.resizeMode === 'custom'
+                        ? 'bg-brand-500 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    Custom Dimensions
+                  </button>
+                  <button
+                    onClick={() => handleImageSettingChange('resizeMode', 'percentage')}
+                    className={`py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      imageSettings.resizeMode === 'percentage'
+                        ? 'bg-brand-500 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    Scale %
+                  </button>
+                  <button
+                    onClick={() => handleImageSettingChange('resizeMode', 'preset')}
+                    className={`py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      imageSettings.resizeMode === 'preset'
+                        ? 'bg-brand-500 text-white'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    Social Presets
+                  </button>
+                </div>
+
+                {/* Custom W/H */}
+                {imageSettings.resizeMode === 'custom' && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Width (px)</label>
+                        <input
+                          type="number"
+                          value={imageSettings.targetWidth || ''}
+                          onChange={(e) => handleImageSettingChange('targetWidth', parseInt(e.target.value) || 0)}
+                          className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Height (px)</label>
+                        <input
+                          type="number"
+                          value={imageSettings.targetHeight || ''}
+                          onChange={(e) => handleImageSettingChange('targetHeight', parseInt(e.target.value) || 0)}
+                          className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                    
+                    <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 font-bold cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={imageSettings.maintainAspectRatio}
+                        onChange={(e) => handleImageSettingChange('maintainAspectRatio', e.target.checked)}
+                        className="rounded accent-brand-500"
+                      />
+                      <span>Maintain Aspect Ratio</span>
+                    </label>
+                  </div>
+                )}
+
+                {/* Scale % */}
+                {imageSettings.resizeMode === 'percentage' && (
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span className="text-slate-700 dark:text-slate-300 font-bold">Scale Scale Percentage</span>
+                      <span className="text-brand-500 font-extrabold">{imageSettings.scalePercentage}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="150"
+                      step="5"
+                      value={imageSettings.scalePercentage}
+                      onChange={(e) => handleImageSettingChange('scalePercentage', parseInt(e.target.value))}
+                      className="w-full accent-brand-500 cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                {/* Social Preset Dropdown */}
+                {imageSettings.resizeMode === 'preset' && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Select Dimension Preset</label>
+                    <select
+                      value={imageSettings.preset}
+                      onChange={(e) => handleImageSettingChange('preset', e.target.value as SocialPreset)}
+                      className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
+                    >
+                      {Object.entries(PRESETS).map(([key, val]) => (
+                        <option key={key} value={key}>
+                          {val.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+          ) : (
+            /* Video Settings */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Format Dropdown */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Target Format
+                </label>
+                <div className="grid grid-cols-5 gap-2">
+                  {(['mp4', 'webm', 'mov', 'avi', 'mkv'] as VideoFormat[]).map((fmt) => (
+                    <button
+                      key={fmt}
+                      onClick={() => handleVideoSettingChange('format', fmt)}
+                      className={`py-1.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                        videoSettings.format === fmt
+                          ? 'bg-brand-500 text-white'
+                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {fmt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Video Quality Tier */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Compression Preset
+                </label>
+                <select
+                  value={videoSettings.quality}
+                  onChange={(e) => handleVideoSettingChange('quality', e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
+                >
+                  <option value="high_quality">High Quality (Low Compression)</option>
+                  <option value="balanced">Balanced Quality (Recommended)</option>
+                  <option value="small_size">Small File Size (High Compression)</option>
+                  <option value="maximum_compression">Maximum Shrink (Discord/Email)</option>
+                </select>
+              </div>
+
+            </div>
+          )}
+
         </div>
       )}
 
