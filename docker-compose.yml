@@ -7,5 +7,5 @@ services:
       dockerfile: Dockerfile
     container_name: crispcompress-pro
     ports:
-      - "8999:80"
+      - "8999:8998"
     restart: unless-stopped
