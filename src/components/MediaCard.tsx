@@ -77,19 +77,41 @@ export const MediaCard: React.FC<MediaCardProps> = ({
         
         {/* Left Side: Thumbnail & File Info */}
         <div className="flex items-center gap-4 min-w-0 flex-1">
-          {/* Thumbnail / Icon Badge */}
-          <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0 border border-slate-200 dark:border-slate-700 flex items-center justify-center group">
-            {item.previewUrl && isImage ? (
+          {/* Interactive Thumbnail Preview Badge */}
+          <div 
+            onClick={() => isCompleted && onOpenComparison(item)}
+            className={`relative w-14 h-14 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex-shrink-0 border border-slate-200 dark:border-slate-700 flex items-center justify-center group ${
+              isCompleted ? 'cursor-pointer hover:ring-2 hover:ring-brand-500 transition-all' : ''
+            }`}
+            title={isCompleted ? "Click to open live visual comparison preview" : item.name}
+          >
+            {item.compressedUrl && isImage ? (
+              <img
+                src={item.compressedUrl}
+                alt={item.name}
+                className="w-full h-full object-cover"
+              />
+            ) : item.previewUrl && isImage ? (
               <img
                 src={item.previewUrl}
                 alt={item.name}
                 className="w-full h-full object-cover"
               />
+            ) : item.compressedUrl && !isImage ? (
+              <video src={item.compressedUrl} className="w-full h-full object-cover" />
             ) : item.previewUrl && !isImage ? (
               <video src={item.previewUrl} className="w-full h-full object-cover" />
             ) : (
               <div className="text-slate-400">
                 {isImage ? <ImageIcon className="w-6 h-6" /> : <FileVideo className="w-6 h-6" />}
+              </div>
+            )}
+
+            {/* Hover overlay badge when completed */}
+            {isCompleted && (
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-opacity">
+                <Eye className="w-4 h-4 text-brand-400" />
+                <span className="text-[8px] font-bold">PREVIEW</span>
               </div>
             )}
 
@@ -192,14 +214,15 @@ export const MediaCard: React.FC<MediaCardProps> = ({
 
         {/* Right Side: Quick Action Buttons */}
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800">
-          {/* Compare Button */}
+          {/* Prominent Live Preview & Compare Button */}
           {isCompleted && (
             <button
               onClick={() => onOpenComparison(item)}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              title="Compare Before & After"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-extrabold bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500 hover:text-white border border-brand-500/30 transition-all shadow-xs active:scale-95"
+              title="Open interactive side-by-side preview and comparison"
             >
-              <Eye className="w-4 h-4" />
+              <Eye className="w-3.5 h-3.5" />
+              <span>Preview</span>
             </button>
           )}
 
