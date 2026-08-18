@@ -1,12 +1,12 @@
 export type MediaType = 'image' | 'video' | 'unsupported';
 
-export type ImageFormat = 'webp' | 'jpeg' | 'png' | 'gif';
+export type ImageFormat = 'webp' | 'avif' | 'jpeg' | 'png';
 export type VideoFormat = 'mp4' | 'webm' | 'mov' | 'avi' | 'mkv';
 
 export type ImageResizeMode = 'custom' | 'percentage' | 'preset';
 export type SocialPreset = 'instagram_post' | 'instagram_story' | 'youtube_thumb' | 'hd_1080p' | 'avatar';
 
-export type VideoQuality = 'high_quality' | 'balanced' | 'small_size' | 'maximum_compression';
+export type VideoPreset = 'compatible' | 'smaller_file';
 export type VideoResolution = 'original' | '1080p' | '720p' | '480p';
 
 export interface ImageSettings {
@@ -22,8 +22,9 @@ export interface ImageSettings {
 
 export interface VideoSettings {
   format: VideoFormat;
-  quality: VideoQuality;
+  preset: VideoPreset; // 'compatible' (H.264, CRF 20) | 'smaller_file' (H.265/VP9, CRF 22)
   resolution: VideoResolution;
+  useTwoPass?: boolean; // Two-pass encoding for precise target compression
 }
 
 export interface MediaSettings {
@@ -43,6 +44,7 @@ export interface MediaItem {
   originalWidth?: number;
   originalHeight?: number;
   duration?: number; // Video duration in seconds
+  hasTransparency?: boolean; // Detected alpha channel / transparent pixels
   previewUrl?: string;
   status: ProcessingStatus;
   progress: number;

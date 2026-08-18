@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import type { 
-  MediaItem, MediaSettings, ImageFormat, VideoFormat, ImageSettings, VideoSettings 
+  MediaItem, MediaSettings, ImageFormat, VideoFormat, ImageSettings, VideoSettings, VideoPreset 
 } from './types/media';
 import { getMediaTypeFromExtension, getFileExtension, formatFileSize } from './utils/formatHelpers';
-import { getImageDimensions, processImage, estimateImageSize } from './utils/imageProcessor';
+import { getImageDimensions, processImage, estimateImageSize, checkImageTransparency } from './utils/imageProcessor';
 import { getVideoMetadata, processVideo, estimateVideoSize, getFFmpeg } from './utils/videoProcessor';
 import { downloadAllAsZip, downloadSingleFile } from './utils/zipPackager';
 import { createSampleImageFiles } from './utils/sampleMedia';
@@ -19,7 +19,7 @@ import { ComparisonModal } from './components/ComparisonModal';
 import { ToastNotification } from './components/ToastNotification';
 import type { ToastMessage } from './components/ToastNotification';
 
-const MAX_VIDEO_SIZE_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB limit specifically for videos
+const MAX_VIDEO_SIZE_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5 GB limit for videos
 
 export function App() {
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -101,11 +101,6 @@ export function App() {
         continue;
       }
 
-      // 2. Large Video Processing Warning (>300MB)
-      if (type === 'video' && file.size > 300 * 1024 * 1024) {
-        addToast('info', 'Large Video Warning', `${file.name} is >300MB. Video processing in browser WASM may take longer.`);
-      }
-
       const id = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const previewUrl = URL.createObjectURL(file);
       const ext = getFileExtension(file.name);
@@ -113,9 +108,19 @@ export function App() {
       let originalWidth: number | undefined;
       let originalHeight: number | undefined;
       let duration: number | undefined;
+      let hasTransparency = false;
+
+      if (type === 'image') {
+        hasTransparency = await checkImageTransparency(file);
+      }
+
+      // Default format selection:
+      // If transparent image -> PNG or WebP
+      // Otherwise -> WebP (Default best compression + quality)
+      const defaultImgFormat: ImageFormat = hasTransparency ? 'png' : 'webp';
 
       const defaultImageSettings: ImageSettings = {
-        format: (['png', 'webp', 'gif'].includes(ext) ? ext : 'webp') as ImageFormat,
+        format: defaultImgFormat,
         quality: 80,
         resizeMode: 'custom',
         targetWidth: 0,
@@ -127,7 +132,7 @@ export function App() {
 
       const defaultVideoSettings: VideoSettings = {
         format: (['webm', 'mov', 'avi', 'mkv'].includes(ext) ? ext : 'mp4') as VideoFormat,
-        quality: 'balanced',
+        preset: 'compatible', // Default: Compatible (H.264, CRF 20)
         resolution: 'original',
       };
 
@@ -190,6 +195,7 @@ export function App() {
         originalWidth,
         originalHeight,
         duration,
+        hasTransparency,
         previewUrl,
         status: 'idle',
         progress: 0,
@@ -304,7 +310,7 @@ export function App() {
     );
   };
 
-  const handleApplyGlobalImageFormat = (format: 'webp' | 'jpeg' | 'png', quality: number) => {
+  const handleApplyGlobalImageFormat = (format: ImageFormat, quality: number) => {
     setItems((prev) =>
       prev.map((item) => {
         if (item.type !== 'image') return item;
@@ -322,11 +328,11 @@ export function App() {
     addToast('info', 'Global Preset Applied', `Set all images to ${format.toUpperCase()} (${quality}% Quality)`);
   };
 
-  const handleApplyGlobalVideoFormat = (format: 'mp4' | 'webm', quality: 'balanced' | 'small_size') => {
+  const handleApplyGlobalVideoFormat = (format: 'mp4' | 'webm', preset: VideoPreset) => {
     setItems((prev) =>
       prev.map((item) => {
         if (item.type !== 'video') return item;
-        const newVidSettings: VideoSettings = { ...item.settings.video, format, quality };
+        const newVidSettings: VideoSettings = { ...item.settings.video, format, preset };
         const est = item.duration
           ? estimateVideoSize(item.originalSize, item.duration, newVidSettings)
           : item.estimatedSize;
@@ -337,7 +343,7 @@ export function App() {
         };
       })
     );
-    addToast('info', 'Global Preset Applied', `Set all videos to ${format.toUpperCase()} (${quality})`);
+    addToast('info', 'Global Preset Applied', `Set all videos to ${format.toUpperCase()} (${preset === 'smaller_file' ? 'Smaller File H.265' : 'Compatible H.264'})`);
   };
 
   const processSingleItem = async (id: string): Promise<boolean> => {
@@ -346,7 +352,6 @@ export function App() {
 
     const startTime = Date.now();
 
-    // Start live 1-second interval timer for live elapsed update
     const timer = setInterval(() => {
       const elapsed = Math.max(1, Math.round((Date.now() - startTime) / 1000));
       setItems((prev) =>

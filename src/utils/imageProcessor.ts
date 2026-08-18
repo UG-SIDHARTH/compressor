@@ -1,10 +1,60 @@
 import type { ImageSettings } from '../types/media';
 import { PRESETS } from '../types/media';
-import { getMimeType } from './formatHelpers';
 
 export interface ImageDimensions {
   width: number;
   height: number;
+}
+
+/**
+ * Detects if an image file has transparent pixels (alpha channel < 255)
+ */
+export function checkImageTransparency(file: File): Promise<boolean> {
+  return new Promise((resolve) => {
+    // Only check image types that support alpha (PNG, WebP, GIF)
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!['png', 'webp', 'gif'].includes(ext)) {
+      return resolve(false);
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      try {
+        const canvas = document.createElement('canvas');
+        const maxCheckSize = 300; // Check a scaled-down 300px thumbnail for speed
+        const scale = Math.min(1, maxCheckSize / Math.max(img.width, img.height));
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(false);
+
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        // Check alpha bytes (every 4th byte)
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] < 250) {
+            return resolve(true); // Found transparent pixel
+          }
+        }
+        resolve(false);
+      } catch {
+        resolve(false);
+      }
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(false);
+    };
+
+    img.src = url;
+  });
 }
 
 export function getImageDimensions(file: File): Promise<ImageDimensions> {
@@ -96,14 +146,14 @@ export function estimateImageSize(
   const q = (settings.quality || 80) / 100;
 
   let formatFactor = 1.0;
-  if (settings.format === 'webp') {
-    formatFactor = 0.5 + q * 0.35;
+  if (settings.format === 'avif') {
+    formatFactor = 0.35 + q * 0.3; // AVIF ~40% smaller than WebP
+  } else if (settings.format === 'webp') {
+    formatFactor = 0.45 + q * 0.35; // Default WebP
   } else if (settings.format === 'jpeg') {
     formatFactor = 0.55 + q * 0.4;
   } else if (settings.format === 'png') {
-    formatFactor = 0.9;
-  } else if (settings.format === 'gif') {
-    formatFactor = 0.85;
+    formatFactor = 0.95;
   }
 
   const estimated = Math.round(originalSize * pixelRatio * formatFactor);
@@ -111,7 +161,7 @@ export function estimateImageSize(
 }
 
 /**
- * Compress, resize, and convert image with browser fallback handling for GIF
+ * Compress, resize, and convert image prioritizing quality retention and WebP default
  */
 export async function processImage(
   file: File,
@@ -145,6 +195,7 @@ export async function processImage(
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
+  // Fill white background for JPEG output
   if (settings.format === 'jpeg') {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -152,16 +203,19 @@ export async function processImage(
 
   ctx.drawImage(imgBitmap, 0, 0, targetDims.width, targetDims.height);
   imgBitmap.close();
-  
-  // Browsers don't support canvas.toBlob('image/gif') export natively; fallback to PNG/JPEG
-  let mimeType = getMimeType(settings.format);
-  if (settings.format === 'gif') {
-    mimeType = 'image/png'; // PNG fallback for canvas gif export
-  }
 
+  const mimeMap: Record<string, string> = {
+    webp: 'image/webp',
+    avif: 'image/avif',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+  };
+
+  const mimeType = mimeMap[settings.format] || 'image/webp';
   const qualityVal = (settings.quality || 80) / 100;
 
   return new Promise((resolve, reject) => {
+    // Attempt export with requested format
     canvas.toBlob(
       (blob) => {
         if (blob) {
@@ -171,7 +225,7 @@ export async function processImage(
             height: targetDims.height,
           });
         } else {
-          // Fallback to image/png if toBlob fails
+          // Fallback to image/webp if browser canvas doesn't support requested format (e.g. AVIF on older engines)
           canvas.toBlob((fallbackBlob) => {
             if (fallbackBlob) {
               resolve({
@@ -182,7 +236,7 @@ export async function processImage(
             } else {
               reject(new Error('Failed to generate image blob from canvas.'));
             }
-          }, 'image/png');
+          }, 'image/webp', qualityVal);
         }
       },
       mimeType,

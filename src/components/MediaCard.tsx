@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { 
   FileVideo, ImageIcon, Download, Trash2, Sliders, 
-  RotateCcw, Eye, Sparkles, AlertCircle, Clock, Zap, ArrowRight
+  RotateCcw, Eye, Sparkles, AlertCircle, Clock, Zap, ArrowRight, ShieldCheck
 } from 'lucide-react';
-import type { MediaItem, MediaSettings, ImageFormat, VideoFormat, SocialPreset } from '../types/media';
+import type { MediaItem, MediaSettings, VideoFormat, SocialPreset } from '../types/media';
 import { PRESETS } from '../types/media';
 import { formatFileSize, formatDuration, calculateSpaceSaved } from '../utils/formatHelpers';
 
@@ -64,16 +64,6 @@ export const MediaCard: React.FC<MediaCardProps> = ({
     });
   };
 
-  const getVideoQualityLabel = (quality: string) => {
-    switch (quality) {
-      case 'high_quality': return 'High Quality';
-      case 'balanced': return 'Balanced Quality';
-      case 'small_size': return 'Small File Size';
-      case 'maximum_compression': return 'Max Compression';
-      default: return 'Balanced';
-    }
-  };
-
   return (
     <div className={`rounded-2xl border transition-all duration-200 overflow-hidden shadow-md ${
       isCompleted
@@ -114,6 +104,11 @@ export const MediaCard: React.FC<MediaCardProps> = ({
               <h4 className="text-sm font-extrabold text-slate-900 dark:text-white truncate" title={item.name}>
                 {item.name}
               </h4>
+              {item.hasTransparency && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3" /> Alpha / Transparency
+                </span>
+              )}
               {isCompleted && (
                 <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> Ready
@@ -157,15 +152,17 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 <span className="text-slate-900 dark:text-white font-black">{targetFormat}</span>
               </span>
 
-              {/* Compression Type Badge */}
+              {/* Compression Type / Preset Badge */}
               <span className="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                 {isImage
                   ? imageSettings.resizeMode === 'preset'
                     ? `Preset: ${PRESETS[imageSettings.preset]?.label.split(' ')[0]}`
                     : imageSettings.resizeMode === 'percentage'
                     ? `Scale: ${imageSettings.scalePercentage}%`
-                    : `${imageSettings.quality}% Quality`
-                  : getVideoQualityLabel(videoSettings.quality)}
+                    : `${imageSettings.format.toUpperCase()} (${imageSettings.quality}%)`
+                  : videoSettings.preset === 'smaller_file'
+                  ? 'Smaller File (H.265/VP9, CRF 22)'
+                  : 'Compatible (H.264, CRF 20)'}
               </span>
 
               {/* Estimated Size Preview */}
@@ -230,7 +227,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            title="Adjust Quality & Resize Settings"
+            title="Adjust Quality & Preset Settings"
           >
             <Sliders className="w-4 h-4" />
           </button>
@@ -299,20 +296,35 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                     Output Format
                   </label>
                   <div className="grid grid-cols-4 gap-2">
-                    {(['webp', 'jpeg', 'png', 'gif'] as ImageFormat[]).map((fmt) => (
+                    {[
+                      { id: 'webp', label: 'WebP (Default)' },
+                      { id: 'avif', label: 'AVIF (Max Compress)' },
+                      { id: 'jpeg', label: 'JPEG (Max Compat)' },
+                      { id: 'png', label: 'PNG (Lossless)' },
+                    ].map((fmt) => (
                       <button
-                        key={fmt}
-                        onClick={() => handleImageSettingChange('format', fmt)}
-                        className={`py-1.5 rounded-xl text-xs font-bold uppercase transition-all ${
-                          imageSettings.format === fmt
+                        key={fmt.id}
+                        onClick={() => handleImageSettingChange('format', fmt.id)}
+                        className={`py-2 px-1 rounded-xl text-[11px] font-extrabold transition-all text-center ${
+                          imageSettings.format === fmt.id
                             ? 'bg-brand-500 text-white shadow-sm'
                             : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'
                         }`}
                       >
-                        {fmt}
+                        {fmt.label}
                       </button>
                     ))}
                   </div>
+                  {imageSettings.format === 'avif' && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                      Note: AVIF provides max compression but takes longer to encode and has slightly lower compatibility on older devices.
+                    </p>
+                  )}
+                  {imageSettings.format === 'png' && !item.hasTransparency && (
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                      Note: PNG uses lossless compression. Switch to WebP or JPEG to adjust visual compression sliders.
+                    </p>
+                  )}
                 </div>
 
                 {/* Quality Slider */}
@@ -415,7 +427,7 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                 {imageSettings.resizeMode === 'percentage' && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-bold">
-                      <span className="text-slate-700 dark:text-slate-300 font-bold">Scale Scale Percentage</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-bold">Scale Percentage</span>
                       <span className="text-brand-500 font-extrabold">{imageSettings.scalePercentage}%</span>
                     </div>
                     <input
@@ -455,19 +467,55 @@ export const MediaCard: React.FC<MediaCardProps> = ({
             /* Video Settings */
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* Format Dropdown */}
+              {/* Video Quality Preset Buttons */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Target Format
+                  Quality Encoding Preset (CRF)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleVideoSettingChange('preset', 'compatible')}
+                    className={`p-3 rounded-2xl text-left border transition-all ${
+                      videoSettings.preset === 'compatible'
+                        ? 'bg-brand-500/10 border-brand-500 text-brand-600 dark:text-brand-400 font-extrabold shadow-sm'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <div className="text-xs font-extrabold">Compatible (H.264, CRF 20)</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                      Works on all browsers & devices. Best quality retention.
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleVideoSettingChange('preset', 'smaller_file')}
+                    className={`p-3 rounded-2xl text-left border transition-all ${
+                      videoSettings.preset === 'smaller_file'
+                        ? 'bg-brand-500/10 border-brand-500 text-brand-600 dark:text-brand-400 font-extrabold shadow-sm'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <div className="text-xs font-extrabold">Smaller File (H.265/VP9, CRF 22)</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 font-medium">
+                      Same visual quality, ~40% smaller size. For modern devices.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Target Video Container Format */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Target Container Format
                 </label>
                 <div className="grid grid-cols-5 gap-2">
                   {(['mp4', 'webm', 'mov', 'avi', 'mkv'] as VideoFormat[]).map((fmt) => (
                     <button
                       key={fmt}
                       onClick={() => handleVideoSettingChange('format', fmt)}
-                      className={`py-1.5 rounded-xl text-xs font-bold uppercase transition-all ${
+                      className={`py-2 rounded-xl text-xs font-extrabold uppercase transition-all ${
                         videoSettings.format === fmt
-                          ? 'bg-brand-500 text-white'
+                          ? 'bg-brand-500 text-white shadow-sm'
                           : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                       }`}
                     >
@@ -475,23 +523,23 @@ export const MediaCard: React.FC<MediaCardProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
 
-              {/* Video Quality Tier */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Compression Preset
-                </label>
-                <select
-                  value={videoSettings.quality}
-                  onChange={(e) => handleVideoSettingChange('quality', e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
-                >
-                  <option value="high_quality">High Quality (Low Compression)</option>
-                  <option value="balanced">Balanced Quality (Recommended)</option>
-                  <option value="small_size">Small File Size (High Compression)</option>
-                  <option value="maximum_compression">Maximum Shrink (Discord/Email)</option>
-                </select>
+                {/* Optional Manual Downscaling Control */}
+                <div className="pt-2">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Resolution Downscaling (Optional)
+                  </label>
+                  <select
+                    value={videoSettings.resolution}
+                    onChange={(e) => handleVideoSettingChange('resolution', e.target.value)}
+                    className="w-full mt-1 px-3 py-2 rounded-xl text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
+                  >
+                    <option value="original">Keep Original Resolution (Default)</option>
+                    <option value="1080p">Downscale to 1080p Full HD</option>
+                    <option value="720p">Downscale to 720p HD</option>
+                    <option value="480p">Downscale to 480p SD</option>
+                  </select>
+                </div>
               </div>
 
             </div>
